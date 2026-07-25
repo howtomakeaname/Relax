@@ -83,6 +83,7 @@ def _make_args(**overrides) -> SimpleNamespace:
         "reward_num_workers": 4,
         "rm_url": None,
         "reward_key": None,
+        "reward_router_fallback_rm_type": None,
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -313,8 +314,15 @@ class TestRewardExecutorSingleSample:
     async def test_execute_unknown_rm_type_raises(self):
         args = _make_args(rm_type="totally_unknown_type")
         sample = _make_sample(response="foo", label="bar")
-        with pytest.raises(NotImplementedError, match="totally_unknown_type"):
-            await async_rm(args, sample)
+        result = await async_rm(args, sample)
+        assert result == 0.0
+
+    @pytest.mark.asyncio
+    async def test_execute_unknown_rm_type_uses_fallback(self):
+        args = _make_args(rm_type="totally_unknown_type", reward_router_fallback_rm_type="multiple_choice")
+        sample = _make_sample(response="<answer>A</answer>", label="<answer>A</answer>")
+        result = await async_rm(args, sample)
+        assert result == 1.0
 
 
 @requires_full_pipeline
@@ -353,6 +361,17 @@ class TestBatchedAsyncRM:
         args = _make_args()
         rewards = await batched_async_rm(args, [])
         assert rewards == []
+
+    @pytest.mark.asyncio
+    async def test_batch_auto_routes_mixed_math_and_multiple_choice(self):
+        args = _make_args(rm_type=None)
+        samples = [
+            _make_sample(response="Reasoning\nAnswer: 7", label="7"),
+            _make_sample(response="<answer>B</answer>", label="<answer>B</answer>"),
+        ]
+        rewards = await batched_async_rm(args, samples)
+        assert rewards[0]["score"] == 1.0
+        assert rewards[1] == 1.0
 
 
 # ===========================================================================

@@ -113,6 +113,32 @@ python scripts/tools/process_avqa.py \
   --md-dir /root/AVQA-R1-6K/AVQA_R1/train
 ```
 
+## 内置 Reward 路由
+
+对于单一格式数据集，继续使用全局 reward 类型：
+
+```bash
+--rm-type dapo
+--reward-key score
+```
+
+对于混合格式 batch，将每条样本的 reward 格式写入 metadata，并通过 `--metadata-key` 读取：
+
+```json
+{"prompt": "What is 6+3?", "label": "9", "metadata": {"task_type": "math"}}
+{"prompt": "Pick one: A or B", "label": "<answer>B</answer>", "metadata": {"task_type": "multiple_choice"}}
+```
+
+```bash
+--metadata-key metadata
+```
+
+路由器会先使用每条样本 metadata 中的 `rm_type`、`reward_type`、`reward_format` 或 `task_type`，再回退到全局 `--rm-type`。如果两者都没有设置，会自动识别常见数学标签和 `<answer>A</answer>` 形式的多选标签。未知、缺失或冲突类型默认返回 0 分并记录 warning。若需要让这些样本走某个已知 scorer，可设置：
+
+```bash
+--reward-router-fallback-rm-type dapo
+```
+
 ## 自定义 Reward 方法
 
 您可以在自己的 `.py` 文件内定义 `reward_func(args, sample: Sample, **kwargs) -> float`，然后在任务启动脚本内加入调用即可，具体使用可参考 [DeepEyes](../examples/deepeyes.md)。
@@ -256,7 +282,7 @@ CKPT_ARGS=(
 
 ### 评估参数
 
-您可添加 eval 数据集用于评估，请注意每次调用 eval 时都会把整个数据集过一遍，建议 eval 数据集不要太大。
+您可添加 eval 数据集用于评估。每次调用 eval 时都会把整个数据集过一遍，eval 数据集不宜过大。
 
 ```bash
 VAL_ARGS=(

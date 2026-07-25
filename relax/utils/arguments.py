@@ -1956,6 +1956,16 @@ def get_slime_extra_args_provider(add_custom_arguments=None):
                 help="URL for the reward model service for --rm-type remote_rm, e.g. http://localhost:8000",
             )
             parser.add_argument(
+                "--reward-router-fallback-rm-type",
+                type=str,
+                default=None,
+                help=(
+                    "Fallback reward type used by the format-aware reward router when a sample has "
+                    "unknown, missing, or conflicting reward format metadata. If unset, those samples "
+                    "receive zero reward with a warning."
+                ),
+            )
+            parser.add_argument(
                 "--custom-rm-path",
                 type=str,
                 default=None,

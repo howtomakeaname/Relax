@@ -114,6 +114,32 @@ python scripts/tools/process_avqa.py \
   --md-dir /root/AVQA-R1-6K/AVQA_R1/train
 ```
 
+## Built-in Reward Routing
+
+For a single-format dataset, keep using a global reward type:
+
+```bash
+--rm-type dapo
+--reward-key score
+```
+
+For mixed-format batches, put the reward format in each sample's metadata field and load it with `--metadata-key`:
+
+```json
+{"prompt": "What is 6+3?", "label": "9", "metadata": {"task_type": "math"}}
+{"prompt": "Pick one: A or B", "label": "<answer>B</answer>", "metadata": {"task_type": "multiple_choice"}}
+```
+
+```bash
+--metadata-key metadata
+```
+
+The router first honors per-sample metadata such as `rm_type`, `reward_type`, `reward_format`, or `task_type`, then falls back to the global `--rm-type`. If neither is set, it can infer common math labels and `<answer>A</answer>`-style multiple-choice labels. Unknown, missing, or conflicting types receive zero reward and emit a warning by default. To route those samples through a known scorer instead, set:
+
+```bash
+--reward-router-fallback-rm-type dapo
+```
+
 ## Custom Reward Methods
 
 You can define `reward_func(args, sample: Sample, **kwargs) -> float` in your own `.py` file, then add it to your task launch script. See [DeepEyes](../examples/deepeyes.md) for a concrete example.

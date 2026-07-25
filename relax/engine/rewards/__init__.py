@@ -11,14 +11,9 @@ from relax.utils.misc import load_function
 from relax.utils.types import Sample
 
 from .dapo_genrm import async_compute_score_genrm
-from .deepscaler import get_deepscaler_rule_based_reward
-from .f1 import f1_score
-from .gpqa import compute_gpqa_reward
-from .math_dapo_utils import compute_score as compute_score_dapo
 from .math_utils import extract_answer as extract_boxed_answer
-from .math_utils import grade_answer_verl
-from .multiple_choice import get_multiple_choice_reward
-from .openr1mm import get_openr1mm_rule_based_reward
+from .registry import compute_sync_reward, list_sync_reward_types
+from .router import resolve_reward_route
 
 
 logger = get_logger(__name__)
@@ -63,36 +58,7 @@ class RewardWorker:
 
         Returns the same value the original function would return.
         """
-        if rm_type == "deepscaler":
-            return get_deepscaler_rule_based_reward(response, label)
-        elif rm_type == "geo3k":
-            from .geo3k import get_geo3k_reward
-
-            return get_geo3k_reward(response, label)
-        elif rm_type == "openr1mm":
-            return get_openr1mm_rule_based_reward(response, label)
-        elif rm_type == "multiple_choice":
-            return get_multiple_choice_reward(response, label)
-        elif rm_type == "dapo":
-            return compute_score_dapo(response, label)
-        elif rm_type == "math":
-            return 1 if grade_answer_verl(response, label) else 0
-        elif rm_type == "mopd":
-            from .mopd import get_mopd_reward
-
-            return get_mopd_reward(response, label, metadata)
-        elif rm_type == "f1":
-            return f1_score(response, label)[0]
-        elif rm_type == "gpqa":
-            return compute_gpqa_reward(response, label, metadata=metadata)
-        elif rm_type == "ifbench":
-            from .ifbench import compute_ifbench_reward
-
-            return compute_ifbench_reward(response, label, metadata=metadata)
-        elif rm_type == "random":
-            return random.randint(0, 1)
-        else:
-            raise NotImplementedError(f"RewardWorker: unknown rm_type={rm_type!r}")
+        return compute_sync_reward(rm_type, response, label, metadata=metadata)
 
 
 # ---------------------------------------------------------------------------
@@ -160,21 +126,7 @@ class RewardExecutor:
     }
 
     # CPU-bound / thread-unsafe rm_types dispatched to the Ray worker pool.
-    _SYNC_RM_TYPES = frozenset(
-        {
-            "deepscaler",
-            "geo3k",
-            "openr1mm",
-            "multiple_choice",
-            "dapo",
-            "math",
-            "mopd",
-            "f1",
-            "gpqa",
-            "ifbench",
-            "random",
-        }
-    )
+    _SYNC_RM_TYPES = frozenset(list_sync_reward_types())
 
     async def execute(self, args, sample: Sample, **kwargs):
         """Execute a single reward computation with concurrency control.
@@ -193,7 +145,11 @@ class RewardExecutor:
                 return await rm_function(args, sample, **kwargs)
 
             metadata = sample.metadata if isinstance(sample.metadata, dict) else {}
-            rm_type = (metadata.get("rm_type") or args.rm_type or "").strip()
+            route = resolve_reward_route(args, sample)
+            if route.zero_score:
+                return await _dummy_reward(args)
+
+            rm_type = route.rm_type or ""
             response = sample.response
             label = sample.label
             if rm_type.startswith("boxed_"):
@@ -206,7 +162,6 @@ class RewardExecutor:
                 return await async_handler(args, sample)
 
             # --- sync rm types: dispatch to worker pool ------------------
-            # Default to sync path for any non-empty rm_type not in async dispatch
             if rm_type:
                 self._ensure_workers()
                 worker = self._next_worker()

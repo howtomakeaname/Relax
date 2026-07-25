@@ -1743,7 +1743,7 @@ async def eval_rollout(args, rollout_id) -> RolloutFnEvalOutput:
         for dataset_cfg in args.eval_datasets:
             data = await _run_eval_samples(args, rollout_id, dataset_cfg, _build_eval_samples(args, dataset_cfg))
             results[dataset_cfg.name] = {
-                "rewards": [sample.reward if not reward_key else sample.reward[reward_key] for sample in data],
+                "rewards": [sample.get_reward_value(args, reward_key=reward_key) for sample in data],
                 "truncated": [sample.status == Sample.Status.TRUNCATED for sample in data],
                 "samples": data,
             }

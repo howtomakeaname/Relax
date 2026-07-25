@@ -7,8 +7,9 @@ ANS_TAG = re.compile(r"<answer>\s*(.*?)\s*</answer>", re.S)
 
 
 def extract_answer(text: str) -> str:
+    text = "" if text is None else str(text)
     m = ANS_TAG.search(text)
-    return m.group(1).strip() if m else ""
+    return m.group(1).strip() if m else text.strip()
 
 
 def get_multiple_choice_reward(response, label):
